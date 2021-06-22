@@ -44,7 +44,7 @@ func (m *methodType) newReplyVal() reflect.Value {
 type service struct {
 	name   string
 	typ    reflect.Type
-	rcv   reflect.Value
+	rcv    reflect.Value
 	method map[string]*methodType
 }
 
