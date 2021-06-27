@@ -11,24 +11,22 @@ import (
 type SelectMode int
 
 const (
-	RandomSelect     SelectMode = iota // select randomly
-	RoundRobinSelect                   // select using Robbin algorithm
+	RandomSelect     SelectMode = iota
+	RoundRobinSelect
 )
 
 type Discovery interface {
-	Refresh() error // refresh from remote registry
+	Refresh() error
 	Update(servers []string) error
 	Get(mode SelectMode) (string, error)
 	GetAll() ([]string, error)
 }
 
-// MultiServersDiscovery is a discovery for multi servers without a registry center
-// user provides the server addresses explicitly instead
 type MultiServersDiscovery struct {
-	r       *rand.Rand   // generate random number
-	mu      sync.RWMutex // protect following
+	r       *rand.Rand
+	mu      sync.RWMutex
 	servers []string
-	index   int // record the selected position for robin algorithm
+	index   int
 }
 
 func (d *MultiServersDiscovery) Refresh() error {
@@ -52,7 +50,7 @@ func (d *MultiServersDiscovery) Get(mode SelectMode) (string, error) {
 	case RandomSelect:
 		return d.servers[d.r.Intn(n)], nil
 	case RoundRobinSelect:
-		s := d.servers[d.index%n] // servers could be updated, so mode n to ensure safety
+		s := d.servers[d.index%n]
 		d.index = (d.index + 1) % n
 		return s, nil
 	default:
@@ -67,7 +65,6 @@ func (d *MultiServersDiscovery) GetAll() ([]string, error) {
 	copy(servers, d.servers)
 	return servers, nil}
 
-// NewMultiServerDiscovery creates a MultiServersDiscovery instance
 func NewMultiServerDiscovery(servers []string) *MultiServersDiscovery {
 	d := &MultiServersDiscovery{
 		servers: servers,
