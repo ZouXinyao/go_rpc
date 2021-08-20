@@ -17,15 +17,15 @@ import (
 const MagicNumber = 0x3bef5c
 
 type Option struct {
-	MagicNumber int
-	CodecType   string
+	MagicNumber    int
+	CodecType      string
 	ConnectTimeout time.Duration
 	HandleTimeout  time.Duration
 }
 
 var DefaultOption = &Option{
-	MagicNumber: MagicNumber,
-	CodecType:   codec.GobType,
+	MagicNumber:    MagicNumber,
+	CodecType:      codec.GobType,
 	ConnectTimeout: time.Second * 10,
 }
 
@@ -58,7 +58,7 @@ func (server *Server) ServeConn(conn io.ReadWriteCloser) {
 	server.serveCodec(f(conn), &opt)
 }
 
-var invalidRequest = struct {}{}
+var invalidRequest = struct{}{}
 
 func (server *Server) serveCodec(cc codec.Codec, opt *Option) {
 	sending := new(sync.Mutex)

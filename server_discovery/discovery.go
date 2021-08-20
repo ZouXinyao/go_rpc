@@ -11,7 +11,7 @@ import (
 type SelectMode int
 
 const (
-	RandomSelect     SelectMode = iota
+	RandomSelect SelectMode = iota
 	RoundRobinSelect
 )
 
@@ -37,7 +37,8 @@ func (d *MultiServersDiscovery) Update(servers []string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.servers = servers
-	return nil}
+	return nil
+}
 
 func (d *MultiServersDiscovery) Get(mode SelectMode) (string, error) {
 	d.mu.Lock()
@@ -55,7 +56,8 @@ func (d *MultiServersDiscovery) Get(mode SelectMode) (string, error) {
 		return s, nil
 	default:
 		return "", errors.New("rpc discovery: not supported select mode")
-	}}
+	}
+}
 
 func (d *MultiServersDiscovery) GetAll() ([]string, error) {
 	d.mu.RLock()
@@ -63,7 +65,8 @@ func (d *MultiServersDiscovery) GetAll() ([]string, error) {
 	// return a copy of d.servers
 	servers := make([]string, len(d.servers), len(d.servers))
 	copy(servers, d.servers)
-	return servers, nil}
+	return servers, nil
+}
 
 func NewMultiServerDiscovery(servers []string) *MultiServersDiscovery {
 	d := &MultiServersDiscovery{

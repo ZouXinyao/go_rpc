@@ -4,7 +4,7 @@ import "io"
 
 type Header struct {
 	ServiceMethod string
-	Seq			  uint64
+	Seq           uint64
 	Error         string
 }
 
@@ -18,7 +18,7 @@ type Codec interface {
 type NewCodecFunc func(io.ReadWriteCloser) Codec
 
 const (
-	GobType  string = "application/gob"
+	GobType string = "application/gob"
 )
 
 var NewCodecFuncMap map[string]NewCodecFunc

@@ -265,4 +265,3 @@ func XDial(rpcAddr string, opts ...*server.Option) (*Client, error) {
 }
 
 var _ io.Closer = (*Client)(nil)
-

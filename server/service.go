@@ -97,4 +97,3 @@ func (s *service) call(m *methodType, argv, replyVal reflect.Value) error {
 func isExportedOrBuiltinType(t reflect.Type) bool {
 	return ast.IsExported(t.Name()) || t.PkgPath() == ""
 }
-
