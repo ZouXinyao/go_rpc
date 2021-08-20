@@ -131,7 +131,6 @@ func (server *Server) readRequest(cc codec.Codec) (*request, error) {
 	req.argv = req.mtype.newArgv()
 	req.replyVal = req.mtype.newReplyVal()
 
-	// make sure that argvi is a pointer, ReadBody need a pointer as parameter
 	argvi := req.argv.Interface()
 	if req.argv.Type().Kind() != reflect.Ptr {
 		argvi = req.argv.Addr().Interface()
@@ -182,8 +181,6 @@ func (server *Server) handleRequest(cc codec.Codec, req *request, sending *sync.
 	}
 }
 
-// Accept accepts connections on the listener and serves requests
-// for each incoming connection.
 func (server *Server) Accept(lis net.Listener) {
 	for {
 		conn, err := lis.Accept()
@@ -195,16 +192,8 @@ func (server *Server) Accept(lis net.Listener) {
 	}
 }
 
-// Accept accepts connections on the listener and serves requests
-// for each incoming connection.
 func Accept(lis net.Listener) { DefaultServer.Accept(lis) }
 
-// Register publishes in the server the set of methods of the
-// receiver value that satisfy the following conditions:
-//	- exported method of exported type
-//	- two arguments, both of exported type
-//	- the second argument is a pointer
-//	- one return value, of type error
 func (server *Server) Register(rcvr interface{}) error {
 	s := newService(rcvr)
 	if _, dup := server.serviceMap.LoadOrStore(s.name, s); dup {
@@ -213,5 +202,4 @@ func (server *Server) Register(rcvr interface{}) error {
 	return nil
 }
 
-// Register publishes the receiver's methods in the DefaultServer.
 func Register(rcv interface{}) error { return DefaultServer.Register(rcv) }

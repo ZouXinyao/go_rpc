@@ -19,7 +19,6 @@ type NewCodecFunc func(io.ReadWriteCloser) Codec
 
 const (
 	GobType  string = "application/gob"
-	JsonType string = "application/json"
 )
 
 var NewCodecFuncMap map[string]NewCodecFunc

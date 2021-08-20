@@ -17,11 +17,11 @@ import (
 
 type Call struct {
 	Seq           uint64
-	ServiceMethod string      // format "<service>.<method>"
-	Args          interface{} // arguments to the function
-	Reply         interface{} // reply from the function
-	Error         error       // if error occurs, it will be set
-	Done          chan *Call  // Strobes when call is complete.
+	ServiceMethod string
+	Args          interface{}
+	Reply         interface{}
+	Error         error
+	Done          chan *Call
 }
 
 func (call *Call) done() {
@@ -31,13 +31,13 @@ func (call *Call) done() {
 type Client struct {
 	cc       codec.Codec
 	opt      *server.Option
-	sending  sync.Mutex // protect following
+	sending  sync.Mutex
 	header   codec.Header
-	mu       sync.Mutex // protect following
+	mu       sync.Mutex
 	seq      uint64
 	pending  map[uint64]*Call
-	closing  bool // user has called Close
-	shutdown bool // server has told us to stop
+	closing  bool
+	shutdown bool
 }
 
 var ErrShutdown = errors.New("connection is shut down")
@@ -91,11 +91,9 @@ func (c *Client) terminateCalls(err error) {
 }
 
 func (c *Client) send(call *Call) {
-	// make sure that the client will send a complete request
 	c.sending.Lock()
 	defer c.sending.Unlock()
 
-	// register this call.
 	seq, err := c.registerCall(call)
 	if err != nil {
 		call.Error = err
@@ -103,16 +101,12 @@ func (c *Client) send(call *Call) {
 		return
 	}
 
-	// prepare request header
 	c.header.ServiceMethod = call.ServiceMethod
 	c.header.Seq = seq
 	c.header.Error = ""
 
-	// encode and send the request
 	if err := c.cc.Write(&c.header, call.Args); err != nil {
 		call := c.removeCall(seq)
-		// call may be nil, it usually means that Write partially failed,
-		// client has received the response and handled
 		if call != nil {
 			call.Error = err
 			call.done()
@@ -130,8 +124,6 @@ func (c *Client) receive() {
 		call := c.removeCall(h.Seq)
 		switch {
 		case call == nil:
-			// it usually means that Write partially failed
-			// and call was already removed.
 			err = c.cc.ReadBody(nil)
 		case h.Error != "":
 			call.Error = fmt.Errorf(h.Error)
@@ -145,7 +137,6 @@ func (c *Client) receive() {
 			call.done()
 		}
 	}
-	// error occurs, so terminateCalls pending calls
 	c.terminateCalls(err)
 }
 
@@ -165,8 +156,6 @@ func (c *Client) Go(serviceMethod string, args, reply interface{}, done chan *Ca
 	return call
 }
 
-// Call invokes the named function, waits for it to complete,
-// and returns its error status.
 func (c *Client) Call(ctx context.Context, serviceMethod string, args, reply interface{}) error {
 	call := c.Go(serviceMethod, args, reply, make(chan *Call, 1))
 	select {
@@ -179,7 +168,6 @@ func (c *Client) Call(ctx context.Context, serviceMethod string, args, reply int
 }
 
 func parseOptions(opts ...*server.Option) (*server.Option, error) {
-	// if opts is nil or pass nil as parameter
 	if len(opts) == 0 || opts[0] == nil {
 		return server.DefaultOption, nil
 	}
@@ -201,7 +189,6 @@ func NewClient(conn net.Conn, opt *server.Option) (*Client, error) {
 		log.Println("rpc client: codec error:", err)
 		return nil, err
 	}
-	// send options with server
 	if err := json.NewEncoder(conn).Encode(opt); err != nil {
 		log.Println("rpc client: options error: ", err)
 		_ = conn.Close()
@@ -212,7 +199,7 @@ func NewClient(conn net.Conn, opt *server.Option) (*Client, error) {
 
 func newClientCodec(cc codec.Codec, opt *server.Option) *Client {
 	client := &Client{
-		seq:     1, // seq starts with 1, 0 means invalid call
+		seq:     1,
 		cc:      cc,
 		opt:     opt,
 		pending: make(map[uint64]*Call),
@@ -260,7 +247,6 @@ func dialTimeout(f newClientFunc, network, address string, opts ...*server.Optio
 	}
 }
 
-// Dial connects to an RPC server at the specified network address
 func Dial(network, address string, opts ...*server.Option) (*Client, error) {
 	return dialTimeout(NewClient, network, address, opts...)
 }
