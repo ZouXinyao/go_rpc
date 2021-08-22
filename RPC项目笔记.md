@@ -206,6 +206,90 @@ Call是每次请求承载的信息，Client是保证正确发送请求和接收�
 * shutdown状态改为true
 `func (c *Client) terminateCalls(err error)`
 
-四、服务注册
+# 服务注册
+
+通过反射，获取某个结构体的所有方法；并且通过方法，获取到该方法所有的参数类型与返回值。
+
+## 1. 方法的所有信息：methodType
+
+```go
+type methodType struct {
+	method    reflect.Method // 方法名
+	ArgType   reflect.Type   // 第一个参数类型
+	ReplyType reflect.Type   // 第二个参数类型，也是反馈结果的类型
+	numCalls  uint64
+}
+```
+
+## 2. 服务的信息：service
+
+```go
+type service struct {
+	name   string                 // 服务的结构体名
+	typ    reflect.Type           // 服务的结构体类型
+	rcv    reflect.Value          // 服务的结构体实例本身，实例值
+	method map[string]*methodType // 这个服务的所有方法。
+}
+```
+
+method存的就是上面methodType的方法名反射后的字符串。
+
+### (1) 初始化
+
+`func newService(rcv interface{}) *service`  
+在初始化的过程中，将传入的rcv进行反射，rcv存了需要注册的方法，初始化过程中将格式正确的方法都反射后转存到service中。
+
+### (2) 过滤不符合格式的方法
+
+`func (s *service) registerMethods()`  
+过滤条件就是入参2个，范围值1个(类型为 error)
+
+### (3) call方法，通过反射值调用方法
+
+`func (s *service) call(m *methodType, argv, replyVal reflect.Value) error`  
+call相当于所有调用方法的模板：m为方法反射前的实例；argv、replyVal为两个参数。通过名称可以发现，一般第一个为入参，第二个为返回值，因为整个call的返回值为error，所以只能通过入参将地址传进去，然后将结果存在这个地址中。
+
+## 3. 将服务集成到服务端
+
+已经实现了如何将方法映射成服务。收到请求到回复，相关的步骤有：
+
+1. 根据入参类型，解码请求的 body ；
+2. 调用 service.call，完成方法调用；
+3. 将 reply 序列化为字节流，构造响应报文
+
+### (1) 注册服务端
+
+`func (server *Server) Register(rcvr interface{}) error`  
+
+* 需要创建一个并发安全的map实例(全局的服务端实例serviceMap)，保存服务器有的各个服务，key：服务名；value：服务的实例.
+* 传入的rcvr就是1个服务的实例，将其进行反射，存到服务端的map实例中。
+
+### (2) 服务发现
+
+`func (server *Server) findService(serviceMethod string) (svc *service, mtype *methodType, err error)`
+
+1. 已知收到的请求名称是 service.method 的字符串格式。可以通过字符串解析出服务名service和方法名method。
+2. 根据服务名service在全局的服务端实例serviceMap中查找对应的服务。
+3. 根据方法名在服务中找需要调用的方法。
+
+以上过程就实现了服务发现。
+
+### (3) readRequest方法中补全请求中的内容
+
+```go
+type request struct {
+	h              *codec.Header // 请求的head
+	argv, replyVal reflect.Value
+	mtype          *methodType
+	svc            *service
+}
+```
+收到请求后，将请求的内容存到request实例中，比如方法名、方法的参数类型等，可以通过服务发现后找到的方法填进去。
+
+### (4) handleRequest实现对请求的处理
+
+1. 通过readRequest已知了request的所有内容，包括方法method、参数等。
+2. 调用存在request中的服务实例中的call方法，就可以实现对请求的业务处理，得到结果，这个过程相当于普通的函数调用一样。
+
 
 学习<https://geektutu.com/post/geerpc.html>，做的一些总结。

@@ -18,8 +18,8 @@ import (
 type Call struct {
 	Seq           uint64      // 每个请求的唯一编号
 	ServiceMethod string      // 服务和方法名：<service>.<method>
-	Args          interface{} // 请求方法的入参
-	Reply         interface{} // 请求方法的返回值
+	Args          interface{} // 请求方法的入参1
+	Reply         interface{} // 响应中是返回值，请求中是第二个入参
 	Error         error       // 请求的错误信息
 	Done          chan *Call  // 请求结束后，用该字段通知调用方。
 }

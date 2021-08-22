@@ -8,9 +8,9 @@ import (
 )
 
 type methodType struct {
-	method    reflect.Method
-	ArgType   reflect.Type
-	ReplyType reflect.Type
+	method    reflect.Method // 方法名
+	ArgType   reflect.Type   // 第一个参数类型
+	ReplyType reflect.Type   // 第二个参数类型，也是反馈结果的类型
 	numCalls  uint64
 }
 
@@ -42,10 +42,10 @@ func (m *methodType) newReplyVal() reflect.Value {
 }
 
 type service struct {
-	name   string
-	typ    reflect.Type
-	rcv    reflect.Value
-	method map[string]*methodType
+	name   string                 // 服务的结构体名
+	typ    reflect.Type           // 服务的结构体类型
+	rcv    reflect.Value          // 服务的结构体实例本身，实例值
+	method map[string]*methodType // 这个服务的所有方法。
 }
 
 func newService(rcv interface{}) *service {
