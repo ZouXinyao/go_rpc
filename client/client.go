@@ -17,11 +17,11 @@ import (
 
 type Call struct {
 	Seq           uint64
-	ServiceMethod string
-	Args          interface{}
-	Reply         interface{}
-	Error         error
-	Done          chan *Call
+	ServiceMethod string      // 服务和方法名：<service>.<method>
+	Args          interface{} // 请求方法的入参
+	Reply         interface{} // 请求方法的返回值
+	Error         error       // 请求的错误信息
+	Done          chan *Call  // 请求结束后，用该字段通知调用方。
 }
 
 func (call *Call) done() {
