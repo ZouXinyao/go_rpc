@@ -87,12 +87,12 @@ type Option struct {
 
 ### 从监听socket开始介绍
 
-1. 如果收到rpc请求就创建1个socket(名称为conn)，这时accept处理的，这里和socket编程中的一样。
-   * `func (server *Server) Accept(lis net.Listener)`
-2. 开启一个goroutine，处理conn。
-   * `func (server *Server) ServeConn(conn io.ReadWriteCloser)`
-3. 先用json解析Option，通过解析出的内容判断是否是rpc，使用什么解码方法。然后开始解码：
-   * `func (server *Server) serveCodec(cc codec.Codec, opt *Option)`
+1. 如果收到rpc请求就创建1个socket(名称为conn)，这时accept处理的，这里和socket编程中的一样。  
+   `func (server *Server) Accept(lis net.Listener)`
+2. 开启一个goroutine，处理conn。  
+   `func (server *Server) ServeConn(conn io.ReadWriteCloser)`
+3. 先用json解析Option，通过解析出的内容判断是否是rpc，使用什么解码方法。然后开始解码：  
+   `func (server *Server) serveCodec(cc codec.Codec, opt *Option)`
 4. 开始根据编解码实例解析后序字段，由于可以发多个请求方法，所以需要一个一个解析请求，然后处理，直到解析出的请求是nil。处理请求也是用新的goroutine进行处理，由于反馈响应时需要避免多个结果混合到一起，所以需要在编码阶段每个结果单独进行。也就是说处理请求可以并发进行，但是对处理后的结果进行编码和发送的过程需要串行。
    * 解析请求：`func (server *Server) readRequest(cc codec.Codec) (*request, error)`
    * 处理请求：`func (server *Server) handleRequest(cc codec.Codec, req *request, sending *sync.Mutex, wg *sync.WaitGroup, timeout time.Duration)`
@@ -100,7 +100,111 @@ type Option struct {
 
 到此为止，服务端在监听socket时收到rpc请求、解析、处理请求、编码反馈，整个过程都完成了。
 
-三、客户端
+# 客户端
+
+## 1. 承载1次rpc调用需要的信息的结构Call
+
+* 服务和方法名
+* 方法的入参
+* 服务端反馈的该方法的返回值
+* 有可能产生的错误信息
+* 需要一个管道字段在rpc处理后通知调用方
+* 请求的编号，为了区分是哪个请求
+
+```go
+type Call struct {
+	Seq           uint64      // 每个请求的唯一编号
+	ServiceMethod string      // 服务和方法名：<service>.<method>
+	Args          interface{} // 请求方法的入参
+	Reply         interface{} // 请求方法的返回值
+	Error         error       // 请求的错误信息
+	Done          chan *Call  // 请求结束后，用该字段通知调用方。
+}
+```
+
+## 2. 客户端的数据结构Client
+
+```go
+type Client struct {
+	cc       codec.Codec      // 编解码
+	opt      *server.Option   // 与服务端协商的控制信息
+	sending  sync.Mutex       // 保证请求的串行发送，避免多个请求混在一起
+	header   codec.Header     // 请求头
+	mu       sync.Mutex       // 保证请求有序发送
+	seq      uint64           // 请求编号，每个请求唯一
+	pending  map[uint64]*Call // 未处理完的请求
+	closing  bool             // 用户主动关闭
+	shutdown bool             // 错误发送导致
+}
+```
+
+Call是每次请求承载的信息，Client是保证正确发送请求和接收响应的客户端。
+
+## 3. 发送请求需要的方法
+
+### (1) 关闭客户端
+
+就是正常关闭一个socket。需要注意的是要保证多个客户端正常关闭，需要并发安全。closing标识和socket的close()都执行完成才算关闭了一个客户端。  
+`func (c *Client) Close() error`
+
+### (2) 判断客户端是否可用
+
+根据客户端的closing和shutdown字段判断客户端的状态，同样保证客户端某个时刻状态不发生改变，需要并发控制。  
+`func (c *Client) IsAvailable() bool`
+
+### (3) 创建客户端
+
+1. 接收用户的socket和option，将option信息发送给服务端协商好编解码方式。  
+   `func NewClient(conn net.Conn, opt *server.Option) (*Client, error)`
+2. 新建1个客户端实例，然后开启一个goroutine接受响应。  
+   `func newClientCodec(cc codec.Codec, opt *server.Option) *Client`
+
+### (4) 接收响应：receive方法
+
+1. 先解析head，然后根据解析出的seq编号将请求从pending中移除，并返回存请求信息的call。
+2. 将响应结果解析到call中，然后将call通过管道发送给调用者。
+
+以上过程完成了解析head、将该请求实例(call)从pending中移除、将结果解析出来存在call中，再将这个call发给调用方。
+`func (c *Client) receive()`
+
+### (5) 发送请求的接口
+
+1. Go 和 Call 是客户端暴露给用户的两个 RPC 服务调用接口，Go 是一个异步接口，返回 call 实例。发送出去就返回，不需要等待响应。
+   `func (c *Client) Go(serviceMethod string, args, reply interface{}, done chan *Call) *Call`
+2. Call 是对 Go 的封装，阻塞 call.Done，等待响应返回，是一个同步接口。
+   `func (c *Client) Call(ctx context.Context, serviceMethod string, args, reply interface{}) error`
+3. Go接口中创建1个call实例，然后将这个实例发送通过调用 send 方法发送出去。
+4. Go接口在发送过程中是阻塞的，需要等待发送成功后才能执行后序。Call接口的阻塞是阻塞到了收到这个请求的响应。
+
+### (6) 发送请求：send方法
+
+1. 发送过程保证每个请求有序发送，不发生混淆，所以需要并发安全。发送的并发控制都是使用名为sending的锁，其他操作使用mu锁。
+2. 将call实例添加到Client中的pending中(注册call实例)
+3. 构造header和args。然后他们编码发送给服务端。
+
+`func (c *Client) send(call *Call)`
+
+### (7) 与Call相关
+
+#### (a) 注册call实例，将Call添加到pending
+
+1. 应用在send过程
+2. 将call实例添加到pending中
+3. 更新请求序列号seq
+
+`func (c *Client) registerCall(call *Call) (uint64, error)`
+
+#### (b) 将Call移除到pending，并返回结果
+
+* 接收到响应，请求发送失败，清空请求列表，只要需要将call从pending中移除的场合都需要。
+`func (c *Client) removeCall(seq uint64) *Call`
+
+#### (c) 移除所有calls，清空pending
+
+* 移除所有的calls
+* 并且通知调用者
+* shutdown状态改为true
+`func (c *Client) terminateCalls(err error)`
 
 四、服务注册
 

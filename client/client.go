@@ -16,7 +16,7 @@ import (
 )
 
 type Call struct {
-	Seq           uint64
+	Seq           uint64      // 每个请求的唯一编号
 	ServiceMethod string      // 服务和方法名：<service>.<method>
 	Args          interface{} // 请求方法的入参
 	Reply         interface{} // 请求方法的返回值
@@ -29,15 +29,15 @@ func (call *Call) done() {
 }
 
 type Client struct {
-	cc       codec.Codec
-	opt      *server.Option
-	sending  sync.Mutex
-	header   codec.Header
-	mu       sync.Mutex
-	seq      uint64
-	pending  map[uint64]*Call
-	closing  bool
-	shutdown bool
+	cc       codec.Codec      // 编解码
+	opt      *server.Option   // 与服务端协商的控制信息
+	sending  sync.Mutex       // 保证请求的串行发送，避免多个请求混在一起
+	header   codec.Header     // 请求头
+	mu       sync.Mutex       // 保证请求有序发送
+	seq      uint64           // 请求编号，每个请求唯一
+	pending  map[uint64]*Call // 未处理完的请求
+	closing  bool             // 用户主动关闭
+	shutdown bool             // 错误发送导致
 }
 
 var ErrShutdown = errors.New("connection is shut down")
@@ -141,6 +141,7 @@ func (c *Client) receive() {
 }
 
 func (c *Client) Go(serviceMethod string, args, reply interface{}, done chan *Call) *Call {
+	// 为了不阻塞Go的返回，需要一个buffer。后面的10改成别的数字也一样，只要满足不阻塞就行。
 	if done == nil {
 		done = make(chan *Call, 10)
 	} else if cap(done) == 0 {
